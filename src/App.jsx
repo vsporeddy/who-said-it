@@ -10,6 +10,7 @@ const styles = {
   input: { width: '100%', padding: '15px', fontSize: '1rem', borderRadius: '8px', border: 'none', background: '#383a40', color: 'white', outline: 'none', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   dropdown: { position: 'absolute', width: '100%', maxHeight: '200px', overflowY: 'auto', background: '#2b2d31', borderRadius: '0 0 8px 8px', zIndex: 10, textAlign: 'left', boxShadow: '0 4px 6px rgba(0,0,0,0.5)' },
   dropdownItem: { padding: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #1e1f22', color: '#dbdee1' },
+  disabledItem: { padding: '10px', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #1e1f22', color: '#dbdee1', opacity: 0.5, background: '#232428' }, // New style for duplicates
   grid: { display: 'flex', flexDirection: 'column', gap: '8px' },
   row: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '8px' },
   cell: { padding: '10px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', color: 'white', fontWeight: 'bold', boxShadow: '0 2px 2px rgba(0,0,0,0.2)' },
@@ -34,21 +35,15 @@ export default function App() {
   const [gameOver, setGameOver] = useState(false);
   const [copied, setCopied] = useState(false);
   
-  // 1. Initial Load: Fetch Data AND Check Local Storage
   useEffect(() => {
     fetch('./game_data.json')
       .then(res => res.json())
       .then(json => {
         setData(json);
-        
-        // Pick Daily Puzzle
         const seed = getDailySeed();
         const randIndex = Math.floor(seededRandom(seed) * json.messages.length);
         setTargetMsg(json.messages[randIndex]);
 
-        // CHECK LOCAL STORAGE
-        // We look for a saved state that matches TODAY'S seed.
-        // If the seed is different (new day), we ignore the old save.
         const savedState = localStorage.getItem('whosaidit_state');
         if (savedState) {
           const parsed = JSON.parse(savedState);
@@ -60,21 +55,14 @@ export default function App() {
       });
   }, []);
 
-  // 2. Save State whenever guesses change
   useEffect(() => {
-    if (!targetMsg) return; // Don't save before data is loaded
-
+    if (!targetMsg) return;
     const seed = getDailySeed();
-    const stateToSave = {
-      seed: seed,
-      guesses: guesses,
-      gameOver: gameOver
-    };
-    
-    localStorage.setItem('whosaidit_state', JSON.stringify(stateToSave));
+    localStorage.setItem('whosaidit_state', JSON.stringify({
+      seed, guesses, gameOver
+    }));
   }, [guesses, gameOver, targetMsg]);
 
-  // Autocomplete Logic
   const filteredUsers = useMemo(() => {
     if (!data || !input) return [];
     const searchStr = input.toLowerCase();
@@ -83,162 +71,3 @@ export default function App() {
       u.nickname.toLowerCase().includes(searchStr) || 
       u.display_name.toLowerCase().includes(searchStr)
     ).slice(0, 5);
-  }, [data, input]);
-
-  const handleGuess = (user) => {
-    if (gameOver) return;
-    const targetUser = data.users[targetMsg.author_id];
-    
-    const rankDir = user.rank_val === targetUser.rank_val ? 'equal' : (user.rank_val > targetUser.rank_val ? 'higher' : 'lower');
-    const joinDir = user.joined_at === targetUser.joined_at ? 'equal' : (user.joined_at > targetUser.joined_at ? 'earlier' : 'later');
-
-    const newGuess = {
-      user: user,
-      correct: user.id === targetUser.id,
-      rankHint: rankDir,
-      joinHint: joinDir,
-      sharedClues: user.clues.filter(c => targetUser.clues.includes(c))
-    };
-
-    const updatedGuesses = [...guesses, newGuess];
-    setGuesses(updatedGuesses);
-    setInput('');
-    
-    if (newGuess.correct || updatedGuesses.length >= 6) {
-      setGameOver(true);
-    }
-  };
-
-  const handleShare = () => {
-    let text = `Who Said It? ${new Date().toLocaleDateString()} - ${guesses.length}/6\n\n`;
-    
-    guesses.forEach(g => {
-        text += g.correct ? '🟩' : '⬛';
-        text += g.rankHint === 'equal' ? '🟩' : (g.rankHint === 'higher' ? '⬆️' : '⬇️');
-        text += g.joinHint === 'equal' ? '🟩' : (g.joinHint === 'earlier' ? '⬅️' : '➡️');
-        text += g.sharedClues.length > 0 ? '🟨' : '⬛';
-        text += '\n';
-    });
-
-    // Added URL here
-    text += '\nhttps://vsporeddy.github.io/who-said-it/';
-
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getDiscordLink = () => {
-    if (!data || !targetMsg) return '#';
-    return `https://discord.com/channels/${data.meta.guild_id}/${targetMsg.channel_id}/${targetMsg.msg_id}`;
-  };
-
-  if (!data || !targetMsg) return <div style={{padding:'20px', color:'white'}}>Loading...</div>;
-
-  return (
-    <div style={styles.container}>
-      <h1>Who Said It?</h1>
-      
-      {targetMsg.type === 'image' ? (
-        <img src={targetMsg.content} style={styles.imagePreview} alt="Puzzle" />
-      ) : (
-        <div style={styles.quoteBox}>"{targetMsg.content}"</div>
-      )}
-
-      {/* INPUT */}
-      {!gameOver && (
-        <div style={styles.inputGroup}>
-          <input 
-            style={styles.input}
-            placeholder="Type a name..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          {input && (
-            <div style={styles.dropdown}>
-              {filteredUsers.map(u => (
-                <div key={u.id} style={styles.dropdownItem} onClick={() => handleGuess(u)}>
-                  <img src={u.avatar} style={styles.avatarSmall} alt="" />
-                  <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start', lineHeight:'1.2'}}>
-                    <span style={{fontWeight:'bold'}}>{u.nickname}</span>
-                    <span style={{fontSize:'0.8rem', color:'#949BA4'}}>
-                      {u.display_name !== u.nickname ? u.display_name : u.username}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* GRID */}
-      <div style={styles.grid}>
-        <div style={{display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:'5px', fontSize:'0.8rem', opacity: 0.7, marginBottom:'5px', color:'#dbdee1'}}>
-            <span>User</span>
-            <span>Rank</span>
-            <span>Joined</span>
-            <span>Roles</span>
-        </div>
-        {guesses.map((g, i) => (
-          <GuessRow key={i} guess={g} />
-        ))}
-      </div>
-
-      {/* GAME OVER UI */}
-      {gameOver && (
-        <div style={styles.resultsBox}>
-          <h2 style={{marginTop:0}}>{guesses[guesses.length-1].correct ? "Nailed it!" : "Game Over"}</h2>
-          
-          <div style={{marginBottom: '20px'}}>
-            The message was sent by: <br/>
-            <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', marginTop:'10px'}}>
-                <img src={data.users[targetMsg.author_id].avatar} style={styles.avatarSmall} alt=""/>
-                <strong>{data.users[targetMsg.author_id].nickname}</strong>
-            </div>
-          </div>
-
-          <div style={{display:'flex', gap:'10px', justifyContent:'center', flexWrap:'wrap'}}>
-            <button onClick={handleShare} style={styles.btnPrimary}>
-              <Share2 size={18} /> {copied ? "Copied!" : "Share Result"}
-            </button>
-            
-            <a href={getDiscordLink()} target="_blank" rel="noopener noreferrer" style={styles.btnSecondary}>
-              <ExternalLink size={18} /> Jump to Message
-            </a>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GuessRow({ guess }) {
-  const getCellColor = (isCorrect) => isCorrect ? '#23a559' : '#4e5058'; // Discord Green / Dark Grey
-  const getPartialColor = (isClose) => isClose ? '#f0b232' : '#4e5058'; // Discord Yellow / Dark Grey
-
-  return (
-    <div style={styles.row}>
-      <div style={{...styles.cell, background: getCellColor(guess.correct), justifyContent: 'flex-start', gap: '10px'}}>
-        <img src={guess.user.avatar} style={styles.avatarSmall} alt="" />
-        {guess.user.nickname}
-      </div>
-
-      <div style={{...styles.cell, background: getPartialColor(guess.rankHint === 'equal')}}>
-        {guess.rankHint === 'equal' ? <Check size={16}/> : 
-         guess.rankHint === 'higher' ? <ArrowUp size={16}/> : 
-         <ArrowDown size={16}/>}
-      </div>
-
-      <div style={{...styles.cell, background: getPartialColor(guess.joinHint === 'equal')}}>
-        {guess.joinHint === 'equal' ? <Check size={16}/> : 
-         guess.joinHint === 'earlier' ? <span>Earlier</span> : 
-         <span>Later</span>}
-      </div>
-
-      <div style={{...styles.cell, background: guess.sharedClues.length > 0 ? '#f0b232' : '#4e5058', fontSize: '0.6rem', flexDirection:'column', lineHeight:'1'}}>
-        {guess.sharedClues.length > 0 ? guess.sharedClues.slice(0,2).join(', ') : "-"}
-      </div>
-    </div>
-  );
-}
