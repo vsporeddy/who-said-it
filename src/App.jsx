@@ -10,7 +10,7 @@ const styles = {
   input: { width: '100%', padding: '15px', fontSize: '1rem', borderRadius: '8px', border: 'none', background: '#383a40', color: 'white', outline: 'none', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   dropdown: { position: 'absolute', width: '100%', maxHeight: '200px', overflowY: 'auto', background: '#2b2d31', borderRadius: '0 0 8px 8px', zIndex: 10, textAlign: 'left', boxShadow: '0 4px 6px rgba(0,0,0,0.5)' },
   dropdownItem: { padding: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #1e1f22', color: '#dbdee1' },
-  disabledItem: { padding: '10px', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #1e1f22', color: '#dbdee1', opacity: 0.5, background: '#232428' }, // New style for duplicates
+  disabledItem: { padding: '10px', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #1e1f22', color: '#dbdee1', opacity: 0.5, background: '#232428' },
   grid: { display: 'flex', flexDirection: 'column', gap: '8px' },
   row: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '8px' },
   cell: { padding: '10px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', color: 'white', fontWeight: 'bold', boxShadow: '0 2px 2px rgba(0,0,0,0.2)' },
@@ -70,13 +70,11 @@ export default function App() {
       u.username.toLowerCase().includes(searchStr) || 
       u.nickname.toLowerCase().includes(searchStr) || 
       u.display_name.toLowerCase().includes(searchStr)
-    ).slice(0, 5); // You might want to increase this limit slightly if you have many blocked users appearing
+    ).slice(0, 5);
   }, [data, input]);
 
   const handleGuess = (user) => {
     if (gameOver) return;
-    
-    // Prevent Duplicate Guesses
     if (guesses.some(g => g.user.id === user.id)) return;
 
     const targetUser = data.users[targetMsg.author_id];
@@ -102,7 +100,14 @@ export default function App() {
   };
 
   const handleShare = () => {
-    let text = `Who Said It? ${new Date().toLocaleDateString()} - ${guesses.length}/6\n\n`;
+    // 1. Header: "Who Said It? [Date]"
+    // 2. Score: "X/6"
+    // 3. Grid
+    // 4. URL
+    
+    const dateStr = new Date().toLocaleDateString();
+    let text = `Who Said It? ${dateStr}\n${guesses.length}/6\n\n`;
+    
     guesses.forEach(g => {
         text += g.correct ? '🟩' : '⬛';
         text += g.rankHint === 'equal' ? '🟩' : (g.rankHint === 'higher' ? '⬆️' : '⬇️');
@@ -110,7 +115,9 @@ export default function App() {
         text += g.sharedClues.length > 0 ? '🟨' : '⬛';
         text += '\n';
     });
+
     text += '\nhttps://vsporeddy.github.io/who-said-it/';
+
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
