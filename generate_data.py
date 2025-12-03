@@ -155,7 +155,7 @@ async def on_ready():
             print("!!! Skipping remaining messages in this channel to save progress.")
 
     # Save to JSON
-    with open('game_data_4.json', 'w') as f:
+    with open('public/game_data.json', 'w') as f:
         json.dump(data, f)
     
     print(f"Done! Saved {len(data['users'])} users and {len(data['messages'])} unique messages.")
