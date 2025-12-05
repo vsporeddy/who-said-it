@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowUp, ArrowDown, Check, Share2, ExternalLink } from 'lucide-react';
 
+// CONFIGURATION
+const MAX_GUESSES = 5; // <--- CHANGED FROM 6 TO 5
+
 // STYLES (Discord Dark Theme)
 const styles = {
   container: { maxWidth: '600px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', textAlign: 'center', paddingBottom: '50px' },
   imagePreview: { maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' },
   quoteBox: { background: '#2b2d31', borderLeft: '4px solid #5865F2', padding: '15px', borderRadius: '4px', fontSize: '1.1rem', marginBottom: '20px', textAlign: 'left', color: '#dbdee1' },
-  inputGroup: { position: 'relative', marginBottom: '10px' }, // Reduced bottom margin to fit counter
+  inputGroup: { position: 'relative', marginBottom: '10px' },
   input: { width: '100%', padding: '15px', fontSize: '1rem', borderRadius: '8px', border: 'none', background: '#383a40', color: 'white', outline: 'none', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   dropdown: { position: 'absolute', width: '100%', maxHeight: '200px', overflowY: 'auto', background: '#2b2d31', borderRadius: '0 0 8px 8px', zIndex: 10, textAlign: 'left', boxShadow: '0 4px 6px rgba(0,0,0,0.5)' },
   dropdownItem: { padding: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #1e1f22', color: '#dbdee1' },
@@ -18,7 +21,7 @@ const styles = {
   btnPrimary: { background: '#5865F2', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', transition: 'background 0.2s' },
   btnSecondary: { background: '#4f545c', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' },
   resultsBox: { marginTop: '30px', padding: '20px', background: '#2b2d31', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' },
-  guessCounter: { fontSize: '0.9rem', color: '#949BA4', marginBottom: '20px', marginTop: '5px' } // Style for the new counter
+  guessCounter: { fontSize: '0.9rem', color: '#949BA4', marginBottom: '20px', marginTop: '5px' }
 };
 
 // 1. IMPROVED SEED GEN (Based on Local Time)
@@ -115,7 +118,8 @@ export default function App() {
     setGuesses(updatedGuesses);
     setInput('');
     
-    if (newGuess.correct || updatedGuesses.length >= 6) {
+    // CHECK GAME OVER using MAX_GUESSES
+    if (newGuess.correct || updatedGuesses.length >= MAX_GUESSES) {
       setGameOver(true);
     }
   };
@@ -127,7 +131,8 @@ export default function App() {
     const isWin = lastGuess && lastGuess.correct;
     const score = isWin ? guesses.length : 'X';
     
-    let text = `Who Said It? ${dateStr}\n${score}/6\n`;
+    // USE MAX_GUESSES IN SHARE TEXT
+    let text = `Who Said It? ${dateStr}\n${score}/${MAX_GUESSES}\n`;
     
     guesses.forEach(g => {
         text += g.correct ? '🟩' : '⬛';
@@ -154,6 +159,8 @@ export default function App() {
   };
 
   if (!data || !targetMsg) return <div style={{padding:'20px', color:'white'}}>Loading...</div>;
+
+  const guessesRemaining = MAX_GUESSES - guesses.length;
 
   return (
     <div style={styles.container}>
@@ -200,9 +207,9 @@ export default function App() {
               </div>
             )}
           </div>
-          {/* GUESS COUNTER */}
+          {/* DYNAMIC COUNTER */}
           <div style={styles.guessCounter}>
-            {6 - guesses.length} guess{6 - guesses.length !== 1 ? 'es' : ''} remaining
+            {guessesRemaining} guess{guessesRemaining !== 1 ? 'es' : ''} remaining
           </div>
         </>
       )}
