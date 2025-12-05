@@ -20,6 +20,7 @@ const styles = {
   resultsBox: { marginTop: '30px', padding: '20px', background: '#2b2d31', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }
 };
 
+// 1. IMPROVED SEED GEN (Based on Local Time)
 const getDailySeed = () => {
   const now = new Date();
   const dateStr = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
@@ -28,16 +29,12 @@ const getDailySeed = () => {
   for (let i = 0; i < dateStr.length; i++) {
     const char = dateStr.charCodeAt(i);
     hash = (hash << 5) - hash + char;
-    hash |= 0;
+    hash |= 0; 
   }
   return Math.abs(hash);
 };
 
-const seededRandom = (seed) => {
-  const x = Math.sin(seed++) * 10000;
-  return x - Math.floor(x);
-};
-
+// 2. IMPROVED RANDOM (Mulberry32)
 const mulberry32 = (a) => {
     return function() {
       var t = a += 0x6D2B79F5;
@@ -60,9 +57,11 @@ export default function App() {
       .then(res => res.json())
       .then(json => {
         setData(json);
+        
         const seed = getDailySeed();
         const rng = mulberry32(seed); 
         const randIndex = Math.floor(rng() * json.messages.length);
+        
         setTargetMsg(json.messages[randIndex]);
 
         const savedState = localStorage.getItem('whosaidit_state');
@@ -122,7 +121,13 @@ export default function App() {
 
   const handleShare = () => {
     const dateStr = new Date().toLocaleDateString();
-    let text = `Who Said It? ${dateStr}\n${guesses.length}/6\n`;
+    
+    // LOGIC: Determine if it's a win or loss for the score text
+    const lastGuess = guesses[guesses.length - 1];
+    const isWin = lastGuess && lastGuess.correct;
+    const score = isWin ? guesses.length : 'X'; // "X/6" is standard for loss
+    
+    let text = `Who Said It? ${dateStr}\n${score}/6\n`;
     
     guesses.forEach(g => {
         text += g.correct ? '🟩' : '⬛';
@@ -198,12 +203,16 @@ export default function App() {
 
       {/* GRID */}
       <div style={styles.grid}>
-        <div style={{display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:'5px', fontSize:'0.8rem', opacity: 0.7, marginBottom:'5px', color:'#dbdee1'}}>
-            <span>User</span>
-            <span>Rank</span>
-            <span>Joined</span>
-            <span>Roles</span>
-        </div>
+        {/* CONDITIONAL RENDER: Only show header if there is at least 1 guess */}
+        {guesses.length > 0 && (
+          <div style={{display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:'5px', fontSize:'0.8rem', opacity: 0.7, marginBottom:'5px', color:'#dbdee1'}}>
+              <span>User</span>
+              <span>Rank</span>
+              <span>Joined</span>
+              <span>Roles</span>
+          </div>
+        )}
+        
         {guesses.map((g, i) => (
           <GuessRow key={i} guess={g} />
         ))}
@@ -266,12 +275,11 @@ function GuessRow({ guess }) {
         background: guess.correct ? GREEN : (guess.sharedClues.length > 0 ? YELLOW : GREY), 
         fontSize: '0.6rem', 
         flexDirection:'column', 
-        lineHeight:'1.1',         // Slightly increased line height for readability
-        textAlign: 'center',      // Centers text if it wraps
-        wordBreak: 'break-word',  // Ensures long words don't overflow
-        padding: '5px'            // Reduced padding to fit more text
+        lineHeight:'1.1',
+        textAlign: 'center',
+        wordBreak: 'break-word',
+        padding: '5px'
       }}>
-        {/* UPDATED: now slicing 0 to 5 */}
         {guess.sharedClues.length > 0 ? guess.sharedClues.slice(0,5).join(', ') : "-"}
       </div>
     </div>
