@@ -2,7 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowUp, ArrowDown, Check, Share2, ExternalLink } from 'lucide-react';
 
 // CONFIGURATION
-const MAX_GUESSES = 5; // <--- CHANGED FROM 6 TO 5
+const MAX_GUESSES = 5;
+
+// FLAVOR TEXT OPTIONS
+const WIN_MESSAGES = ["Oh??", "🤠", "👀", "Good job, bud.", "EZ."];
+const LOSE_MESSAGES = ["Yikes.", "Bro??", "Skill Issue?", "Uhhh...", "Frick!"];
 
 // STYLES (Discord Dark Theme)
 const styles = {
@@ -118,7 +122,6 @@ export default function App() {
     setGuesses(updatedGuesses);
     setInput('');
     
-    // CHECK GAME OVER using MAX_GUESSES
     if (newGuess.correct || updatedGuesses.length >= MAX_GUESSES) {
       setGameOver(true);
     }
@@ -131,7 +134,6 @@ export default function App() {
     const isWin = lastGuess && lastGuess.correct;
     const score = isWin ? guesses.length : 'X';
     
-    // USE MAX_GUESSES IN SHARE TEXT
     let text = `Who Said It? ${dateStr}\n${score}/${MAX_GUESSES}\n`;
     
     guesses.forEach(g => {
@@ -151,6 +153,15 @@ export default function App() {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Helper to pick flavor text based on daily seed
+  const getEndGameMessage = () => {
+    if (guesses.length === 0) return "";
+    const isWin = guesses[guesses.length - 1].correct;
+    const seed = getDailySeed();
+    const list = isWin ? WIN_MESSAGES : LOSE_MESSAGES;
+    return list[seed % list.length];
   };
 
   const getDiscordLink = () => {
@@ -207,7 +218,6 @@ export default function App() {
               </div>
             )}
           </div>
-          {/* DYNAMIC COUNTER */}
           <div style={styles.guessCounter}>
             {guessesRemaining} guess{guessesRemaining !== 1 ? 'es' : ''} remaining
           </div>
@@ -233,7 +243,7 @@ export default function App() {
       {/* GAME OVER UI */}
       {gameOver && (
         <div style={styles.resultsBox}>
-          <h2 style={{marginTop:0}}>{guesses[guesses.length-1].correct ? "Nailed it!" : "Game Over"}</h2>
+          <h2 style={{marginTop:0}}>{getEndGameMessage()}</h2>
           
           <div style={{marginBottom: '20px'}}>
             The message was sent by: <br/>
