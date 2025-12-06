@@ -39,7 +39,7 @@ const getDailySeed = () => {
     hash = (hash << 5) - hash + char;
     hash |= 0; 
   }
-  return Math.abs(hash);
+  return Math.abs(hash) + 1;
 };
 
 // 2. IMPROVED RANDOM (Mulberry32)
