@@ -91,20 +91,20 @@ export default function App() {
     }));
   }, [guesses, gameOver, targetMsg]);
 
-const filteredUsers = useMemo(() => {
+  // Search and filtering
+  const filteredUsers = useMemo(() => {
     if (!data || !input) return [];
     const searchStr = input.toLowerCase();
     
-    // 1. Find all matches (Contains)
+    // All matching users
     const matches = Object.values(data.users).filter(u => 
       u.username.toLowerCase().includes(searchStr) || 
       u.nickname.toLowerCase().includes(searchStr) || 
       u.display_name.toLowerCase().includes(searchStr)
     );
 
-    // 2. Sort matches to prioritize "Starts With" and Shorter Names
+    // Sort by relevance
     matches.sort((a, b) => {
-      // Helper: Get best match quality for a user (0 = Exact, 1 = Starts With, 2 = Contains)
       const getScore = (u) => {
         const names = [u.username, u.nickname, u.display_name].map(n => n.toLowerCase());
         if (names.some(n => n === searchStr)) return 0; // Exact match
@@ -115,10 +115,8 @@ const filteredUsers = useMemo(() => {
       const scoreA = getScore(a);
       const scoreB = getScore(b);
 
-      // Priority 1: Match Quality
       if (scoreA !== scoreB) return scoreA - scoreB;
-
-      // Priority 2: Name Length
+      // Tie-breaker: shorter nickname first
       return a.nickname.length - b.nickname.length;
     });
 
