@@ -1,0 +1,40 @@
+name: Daily Data Refresh
+
+on:
+  schedule:
+    # Run at 07:00 UTC daily (adjust as needed)
+    - cron: '0 7 * * *'
+  workflow_dispatch: # Allows you to run it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install discord.py
+
+      - name: Run Scraper
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python generate_data.py
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/game_data.json
+          # Only commit if data changed
+          git commit -m "Daily Data Refresh: Update game_data.json" || exit 0
+          git push

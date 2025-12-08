@@ -2,9 +2,10 @@ import discord
 import json
 import datetime
 import asyncio
+import os
 
 # ================= CONFIGURATION =================
-TOKEN = 'INSERT TOKEN HERE'
+TOKEN = os.getenv('DISCORD_TOKEN') 
 GUILD_ID = 454492770682404875
 
 CHANNEL_MAP = {
@@ -37,6 +38,9 @@ RANK_ORDER = ["Sheriff", "Pardner", "Marshal", "Wrangler", "Rustler", "Drifter",
 CLUE_ROLES = ["seattleite", "Rat Gang", "tft", "variety gamers?", "tractor?", "arom?", "val?", "lost arknights", "boomer shooters", "jelley-events", "qb-dungeoneers", "exiles", "PTCGP", "readers", "riot-games"]
 # =================================================
 
+if not TOKEN:
+    raise ValueError("No DISCORD_TOKEN found in environment variables!")
+
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -51,7 +55,6 @@ data = {
     "messages": []
 }
 
-# Set to track duplicate content
 seen_content = set()
 
 def get_rank(member):
@@ -74,7 +77,7 @@ async def on_ready():
         await client.close()
         return
 
-    print("Scraping Members (Initial Pass)...")
+    print("Scraping Members...")
     for member in guild.members:
         if member.bot: continue
         
@@ -99,7 +102,7 @@ async def on_ready():
     for name, channel_id in CHANNEL_MAP.items():
         channel = client.get_channel(channel_id)
         if not channel: 
-            print(f"Could not find channel: {name} ({channel_id})")
+            print(f" -> Could not find channel: {name} ({channel_id})")
             continue
         
         print(f" -> Scraping #{channel.name} ({name})...")
@@ -107,34 +110,37 @@ async def on_ready():
         count = 0
         try:
             async for msg in channel.history(limit=None):
-                # throttle to avoid rate limits
-                await asyncio.sleep(0.02) 
-
+                await asyncio.sleep(0.02) # Throttling to prevent 503s
+                
                 if msg.author.bot: continue
                 if str(msg.author.id) not in data["users"]: continue
 
-                # If this message is older than the user's stored "joined_at",
-                # update the user's joined_at to this message's timestamp.
+                # Update Join Date
                 msg_ts = msg.created_at.timestamp()
                 current_join_ts = data["users"][str(msg.author.id)]["joined_at"]
                 if msg_ts < current_join_ts:
                     data["users"][str(msg.author.id)]["joined_at"] = msg_ts
 
-                # Content logic
+                # Determine Content
                 content_type = "text"
                 content = msg.content
                 
                 if msg.attachments:
-                    content_type = "image"
-                    content = msg.attachments[0].url
+                    # Check for images based on extension or content type
+                    att = msg.attachments[0]
+                    if att.content_type and att.content_type.startswith('image'):
+                        content_type = "image"
+                        content = att.url # Store the FRESH Discord URL
+                    else:
+                        continue # Skip non-images
                 elif not msg.content:
                     continue 
 
-                # Filter short messages
-                if content_type == "text" and len(content.split()) < 7:
-                    continue
+                # Deduplication & Short Text Filter
+                if content_type == "text":
+                    if len(content.split()) < 7: continue
                 
-                # dedupe
+                # Check for duplicate URLs or Text
                 if content in seen_content:
                     continue
                 seen_content.add(content)
@@ -146,19 +152,19 @@ async def on_ready():
                     "msg_id": str(msg.id),
                     "channel_id": str(msg.channel.id)
                 })
-
+                
                 count += 1
                 if count % 1000 == 0:
-                    print(f"    ...scraped {count} msgs in {name}")
+                    print(f"    ...scraped {count} items in {name}")
+
         except Exception as e:
-            print(f"Error scraping {name}: {e}")
-            print("!!! Skipping remaining messages in this channel to save progress.")
+            print(f"!!! Error scraping {name}: {e}")
 
     # Save to JSON
     with open('public/game_data.json', 'w') as f:
         json.dump(data, f)
     
-    print(f"Done! Saved {len(data['users'])} users and {len(data['messages'])} unique messages.")
+    print(f"Done! Saved {len(data['users'])} users and {len(data['messages'])} puzzles.")
     await client.close()
 
 client.run(TOKEN)
