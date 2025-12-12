@@ -25,7 +25,31 @@ const styles = {
   btnPrimary: { background: '#5865F2', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', transition: 'background 0.2s' },
   btnSecondary: { background: '#4f545c', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' },
   resultsBox: { marginTop: '30px', padding: '20px', background: '#2b2d31', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' },
-  guessCounter: { fontSize: '0.9rem', color: '#949BA4', marginBottom: '20px', marginTop: '5px' }
+  guessCounter: { fontSize: '0.9rem', color: '#949BA4', marginBottom: '20px', marginTop: '5px' },
+  difficultyBadge: {
+    display: 'inline-block',
+    padding: '5px 10px',
+    borderRadius: '15px',
+    fontSize: '0.8rem',
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: '10px',
+    textTransform: 'uppercase',
+    letterSpacing: '1px'
+  },
+  aiHintBox: {
+    marginTop: '15px',
+    padding: '10px',
+    backgroundColor: '#e3f2fd', // Light Blue
+    border: '1px solid #90caf9',
+    borderRadius: '8px',
+    color: '#0d47a1',
+    fontSize: '0.9rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    justifyContent: 'center'
+  }
 };
 
 // Seed gen based on local time
@@ -52,6 +76,15 @@ const mulberry32 = (a) => {
     }
 }
 
+const getDifficultyColor = (label) => {
+  switch(label) {
+    case 'Easy': return '#6aaa64';   // Green
+    case 'Medium': return '#c9b458'; // Yellow
+    case 'Hard': return '#e57373';   // Red
+    default: return '#787c7e';
+  }
+};
+
 export default function App() {
   const [data, setData] = useState(null);
   const [targetMsg, setTargetMsg] = useState(null);
@@ -61,7 +94,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   
   useEffect(() => {
-    fetch('./game_data.json')
+    fetch('./final_game_data.json')
       .then(res => res.json())
       .then(json => {
         setData(json);
@@ -156,7 +189,7 @@ export default function App() {
     const isWin = lastGuess && lastGuess.correct;
     const score = isWin ? guesses.length : 'X';
     
-    let text = `Who Said It? ${dateStr}\n${score}/${MAX_GUESSES}\n`;
+    let text = `Who Said It? ${dateStr} (${targetMsg.difficulty.label})\n${score}/${MAX_GUESSES}\n`;
     
     guesses.forEach(g => {
         text += g.correct ? '🟩' : '⬛';
@@ -199,6 +232,17 @@ export default function App() {
     <div style={styles.container}>
       <h1>Who Said It?</h1>
       
+      {/* DIFFICULTY */}
+      {targetMsg.difficulty && (
+        <div style={{
+          ...styles.difficultyBadge, 
+          backgroundColor: getDifficultyColor(targetMsg.difficulty.label)
+        }}>
+          {targetMsg.difficulty.label}
+        </div>
+      )}
+
+      {/* MESSAGE */}
       {targetMsg.type === 'image' ? (
         <img src={targetMsg.content} style={styles.imagePreview} alt="Puzzle" />
       ) : (
@@ -272,6 +316,12 @@ export default function App() {
                 <strong>{data.users[targetMsg.author_id].nickname}</strong>
             </div>
           </div>
+
+          {targetMsg.imposter_id && (
+            <p style={{fontSize: '0.9rem', color: '#666'}}>
+              (Fun Fact: The AI thought this was <b>{data.users[targetMsg.imposter_id].nickname}</b>)
+            </p>
+          )}
 
           <div style={{display:'flex', gap:'10px', justifyContent:'center', flexWrap:'wrap'}}>
             <button onClick={handleShare} style={styles.btnPrimary}>
