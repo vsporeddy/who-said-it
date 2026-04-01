@@ -52,11 +52,28 @@ const HOLIDAY_OVERRIDES = {
   }
 };
 
+const dateStr = new Date().toLocaleDateString("en-US", {
+  timeZone: "America/New_York",
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric'
+});
+
+const todayStr = new Date().toLocaleDateString("en-US", {
+  timeZone: "America/New_York",
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+});
+
+const isAprilFools = dateStr.startsWith('4/1/');
+
+
 // STYLES (Discord Dark Theme)
 const styles = {
-  title: { maxWidth: '600px', margin: '0 auto', padding: '2px', fontFamily: 'normal Helvetica', textAlign: 'center', letterSpacing: '5px', textShadow: '-5px 5px 10px rgba(0, 0, 0, 0.75)' },
-  subtitle: { maxWidth: '300px', margin: '0 auto', padding: '2px', marginBottom: '10px', fontFamily: 'normal Helvetica', textAlign: 'center', letterSpacing: '1px' },
-  container: { width: 'min(500px, 90%)', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', textAlign: 'center', paddingBottom: '50px' },
+  title: { maxWidth: '600px', margin: '0 auto', padding: '2px', fontFamily: isAprilFools ? '"Comic Sans MS", "Comic Sans", cursive' : 'normal Helvetica', textAlign: 'center', letterSpacing: '5px', textShadow: '-5px 5px 10px rgba(0, 0, 0, 0.75)' },
+  subtitle: { maxWidth: '300px', margin: '0 auto', padding: '2px', marginBottom: '10px', fontFamily: isAprilFools ? '"Comic Sans MS", "Comic Sans", cursive' : 'normal Helvetica', textAlign: 'center', letterSpacing: '1px' },
+  container: { width: 'min(500px, 90%)', margin: '0 auto', padding: '20px', fontFamily: isAprilFools ? '"Comic Sans MS", "Comic Sans", cursive' : 'sans-serif', textAlign: 'center', paddingBottom: '50px', transform: isAprilFools ? 'rotate(1.5deg)' : 'none' },
   imagePreview: { maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', marginBottom: '20px', cursor: 'zoom-in', transition: 'transform 0.1s', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' },
   quoteBox: { background: '#2b2d31', borderLeft: '4px solid #5865F2', padding: '15px', borderRadius: '4px', fontSize: '1.1rem', marginBottom: '20px', textAlign: 'left', color: '#dbdee1' },
   inputGroup: { position: 'relative', marginBottom: '10px' },
@@ -83,20 +100,6 @@ const styles = {
   legendCell: { padding: '8px', fontSize: '0.9rem' },
   dateDisplay: { position: 'fixed', top: '10px', left: '10px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold', zIndex: 1000, backgroundColor: '#383a40', padding: '4px 8px', borderRadius: '4px', pointerEvents: 'none' }
 };
-
-const dateStr = new Date().toLocaleDateString("en-US", {
-  timeZone: "America/New_York",
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric'
-});
-
-const todayStr = new Date().toLocaleDateString("en-US", {
-  timeZone: "America/New_York",
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric'
-});
 
 // Seed gen based on Eastern time
 const getDailySeed = () => {
@@ -262,7 +265,7 @@ export default function App() {
       {/* HEADER */}
       <div style={styles.header}>
         <div style={{ width: '24px' }} />
-        <h1 style={styles.title}>WHODLE <span style={{ fontSize: '0.8em', opacity: 0.5, letterSpacing: '2px' }}>#{puzzleNum}</span></h1>
+        <h1 style={styles.title}>{isAprilFools ? 'WHOMSTDLE' : 'WHODLE'} <span style={{ fontSize: '0.8em', opacity: 0.5, letterSpacing: '2px' }}>#{puzzleNum}</span></h1>
         <CircleHelp
           size={24}
           style={{ cursor: 'pointer', color: '#555' }}

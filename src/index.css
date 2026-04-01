@@ -27,3 +27,11 @@ body {
   display: flex;
   justify-content: center;
 }
+
+html.april-fools {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html.april-fools img {
+  filter: invert(1) hue-rotate(180deg);
+}
