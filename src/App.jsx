@@ -596,7 +596,7 @@ function Game({ mode, shuffledModes, onNextRound }) {
   const handleCombinedShare = () => {
     const rank = combinedRank || getRank(shuffledModes, puzzleNum);
 
-    let text = `WHODLE #${puzzleNum}\n`;
+    let text = `${isAprilFools ? 'WHOMSTDLE' : 'WHODLE'} #${puzzleNum}\n`;
 
     for (const m of shuffledModes) {
       const saved = localStorage.getItem(`whodle_${m}_${puzzleNum}`);
