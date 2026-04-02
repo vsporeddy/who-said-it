@@ -41,8 +41,8 @@ const HOLIDAY_OVERRIDES = {
     text: '1161929955882565632'
   },
   '4/1/2026': {
-    text: '1466277510814629930',
-    image: '1457440526868414693',
+    text: '1445515695440920687',
+    image: '616492595224510475',
     url: '1100267104948727859'
   },
   '4/5/2026': {
@@ -111,7 +111,7 @@ const getDailySeed = () => {
 
 // Mulberry32 PRNG
 const mulberry32 = (a) => {
-  return function() {
+  return function () {
     var t = a += 0x6D2B79F5;
     t = Math.imul(t ^ t >>> 15, t | 1);
     t ^= t + Math.imul(t ^ t >>> 7, t | 61);
@@ -382,7 +382,7 @@ function UrlPreview({ url, preview }) {
           description: data.author_name,
           image: { url: data.thumbnail_url },
         }))
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoading(false));
     } else {
       fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`)
@@ -390,13 +390,13 @@ function UrlPreview({ url, preview }) {
         .then(data => {
           if (data.status === 'success') setMeta(data.data);
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoading(false));
     }
   }, [url, preview]);
 
   let domain = url;
-  try { domain = new URL(url).hostname; } catch (_) {}
+  try { domain = new URL(url).hostname; } catch (_) { }
 
   return (
     <div style={{ marginBottom: '20px' }}>
