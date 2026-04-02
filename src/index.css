@@ -1,13 +1,14 @@
 :root {
-  font-family: 'gg sans', 'Inter', system-ui, sans-serif; /* 'gg sans' is discord's font, falls back to others */
+  font-family: 'gg sans', 'Inter', system-ui, sans-serif;
+  /* 'gg sans' is discord's font, falls back to others */
   line-height: 1.5;
   font-weight: 400;
-  
+
   /* Discord Dark Theme Colors */
   color-scheme: dark;
-  background-color: #313338; 
+  background-color: #313338;
   color: #dbdee1;
-  
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -26,12 +27,4 @@ body {
   width: 100%;
   display: flex;
   justify-content: center;
-}
-
-html.april-fools {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-html.april-fools img {
-  filter: invert(1) hue-rotate(180deg);
 }

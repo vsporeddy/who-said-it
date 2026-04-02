@@ -68,7 +68,6 @@ const todayStr = new Date().toLocaleDateString("en-US", {
 
 const isAprilFools = dateStr.startsWith('4/1/');
 
-
 // STYLES (Discord Dark Theme)
 const styles = {
   title: { maxWidth: '600px', margin: '0 auto', padding: '2px', fontFamily: isAprilFools ? '"Comic Sans MS", "Comic Sans", cursive' : 'normal Helvetica', textAlign: 'center', letterSpacing: '5px', textShadow: '-5px 5px 10px rgba(0, 0, 0, 0.75)' },
