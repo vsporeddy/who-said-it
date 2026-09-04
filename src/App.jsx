@@ -8,8 +8,9 @@ const MODES = ['text', 'image', 'url'];
 // QUIZ MODE ("How well do you know X?")
 const QUIZ_SIZE = 25;
 const QUIZ_TYPE_SLOTS = { text: 13, image: 6, url: 6 }; // ~50% / ~25% / ~25%
-const QUIZ_TARGET_MIN = Math.ceil(QUIZ_SIZE * 0.4);  // 10
-const QUIZ_TARGET_MAX = Math.floor(QUIZ_SIZE * 0.6); // 15
+// Share of posts that are really the target's: drawn at random per quiz within this range
+const QUIZ_TARGET_MIN = Math.ceil(QUIZ_SIZE * 0.3);
+const QUIZ_TARGET_MAX = Math.floor(QUIZ_SIZE * 0.6);
 // Only a perfect score earns an S; each miss drops one step from there.
 const QUIZ_RANKS = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'S'];
 const QUIZ_RANK_MESSAGES = {
@@ -263,7 +264,7 @@ const getQuizPostCounts = (datasets) => {
 };
 
 // Builds a shuffled list of QUIZ_SIZE items: { msg, isTarget }
-// Mix is ~50% text / ~25% image / ~25% url, with 40-60% of posts by the target user.
+// Mix is ~50% text / ~25% image / ~25% url, with 30-60% of posts by the target user.
 const buildQuiz = (datasets, targetId) => {
   const own = {}, others = {};
   for (const mode of MODES) {
@@ -493,9 +494,9 @@ export default function App() {
             </ul>
 
             <h3><Brain size={18} style={{ verticalAlign: 'middle' }} /> Quiz Mode</h3>
-            <p>Tap the brain icon to play <strong>"How well do you know…?"</strong> Pick a server member, then judge {QUIZ_SIZE} posts (messages, images, and links) one at a time: did they post it, or did someone else?</p>
+            <p>Tap the brain icon to play <strong>"How well do you know…?"</strong> Pick a server member, then judge {QUIZ_SIZE} posts: did they post it, or did someone else?</p>
             <ul style={{ paddingLeft: '20px' }}>
-              <li>Somewhere between <strong>40% and 60%</strong> of the posts are really theirs.</li>
+              <li>A random percentage of the posts are really theirs.</li>
               <li>You get a rank at the end based on how many you called correctly. Play as many times as you like.</li>
             </ul>
 
