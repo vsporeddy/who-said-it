@@ -1,9 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Share2, ExternalLink, CircleHelp } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Share2, ExternalLink, CircleHelp, Brain, CalendarDays, X, RotateCcw, Users } from 'lucide-react';
 
 // CONFIGURATION
 const MAX_GUESSES = 5;
 const MODES = ['text', 'image', 'url'];
+
+// QUIZ MODE ("How well do you know X?")
+const QUIZ_SIZE = 25;
+const QUIZ_TYPE_SLOTS = { text: 13, image: 6, url: 6 }; // ~50% / ~25% / ~25%
+const QUIZ_TARGET_MIN = Math.ceil(QUIZ_SIZE * 0.4);  // 10
+const QUIZ_TARGET_MAX = Math.floor(QUIZ_SIZE * 0.6); // 15
+// Only a perfect score earns an S; each miss drops one step from there.
+const QUIZ_RANKS = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'S'];
+const QUIZ_RANK_MESSAGES = {
+  S: "am i that?",
+  A: "besties 🥹",
+  B: "nyum",
+  C: "coin flip energy",
+  D: "do you even know them",
+  F: "bro??"
+};
 const MODE_EMOJI = { text: '💬', image: '📸', url: '🔗' };
 const MODE_FILE = {
   text: 'filtered_text_data.json',
@@ -97,7 +113,16 @@ const styles = {
   legendTable: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
   legendRow: { borderBottom: '1px solid #eee' },
   legendCell: { padding: '8px', fontSize: '0.9rem' },
-  dateDisplay: { position: 'fixed', top: '10px', left: '10px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold', zIndex: 1000, backgroundColor: '#383a40', padding: '4px 8px', borderRadius: '4px', pointerEvents: 'none' }
+  dateDisplay: { position: 'fixed', top: '10px', left: '10px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold', zIndex: 1000, backgroundColor: '#383a40', padding: '4px 8px', borderRadius: '4px', pointerEvents: 'none' },
+  // Quiz mode
+  quizUserList: { maxHeight: '55vh', overflowY: 'auto', background: '#2b2d31', borderRadius: '8px', textAlign: 'left', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', marginTop: '10px' },
+  quizProgressTrack: { height: '6px', background: '#1e1f22', borderRadius: '3px', overflow: 'hidden', margin: '8px 0 20px' },
+  quizProgressFill: { height: '100%', background: '#5865F2', transition: 'width 0.2s' },
+  quizChoiceYes: { flex: 1, background: '#23a559', color: 'white', border: 'none', padding: '14px 10px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
+  quizChoiceNo: { flex: 1, background: '#da373c', color: 'white', border: 'none', padding: '14px 10px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
+  quizFeedback: { padding: '15px', borderRadius: '8px', marginBottom: '10px', color: 'white' },
+  quizGrid: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', maxWidth: '260px', margin: '15px auto' },
+  quizGridCell: { aspectRatio: '1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }
 };
 
 // Seed gen based on Eastern time
@@ -210,6 +235,123 @@ const getRank = (modes, puzzleNum) => {
   }
 };
 
+// ---------- QUIZ HELPERS ----------
+const randInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+
+const shuffleInPlace = (arr, rng = Math.random) => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+// Draws n distinct random items from pool (no mutation of pool)
+const sample = (pool, n) => shuffleInPlace([...pool]).slice(0, n);
+
+// Per-user post counts across all datasets: { [userId]: { text, image, url, total } }
+const getQuizPostCounts = (datasets) => {
+  const counts = {};
+  for (const mode of MODES) {
+    for (const msg of datasets[mode].messages) {
+      const c = counts[msg.author_id] ||= { text: 0, image: 0, url: 0, total: 0 };
+      c[mode] += 1;
+      c.total += 1;
+    }
+  }
+  return counts;
+};
+
+// Builds a shuffled list of QUIZ_SIZE items: { msg, isTarget }
+// Mix is ~50% text / ~25% image / ~25% url, with 40-60% of posts by the target user.
+const buildQuiz = (datasets, targetId) => {
+  const own = {}, others = {};
+  for (const mode of MODES) {
+    own[mode] = datasets[mode].messages.filter(m => m.author_id === targetId);
+    others[mode] = datasets[mode].messages.filter(m => m.author_id !== targetId);
+  }
+  const totalOwn = MODES.reduce((s, m) => s + own[m].length, 0);
+  if (totalOwn < QUIZ_TARGET_MIN) return null;
+
+  // Slot composition per type. If the target has never posted a type, hand those
+  // slots to a type they do post, so the mix doesn't give the answer away.
+  const slots = { ...QUIZ_TYPE_SLOTS };
+  const fallbackType = MODES.find(m => own[m].length > 0);
+  for (const mode of MODES) {
+    if (own[mode].length === 0 && mode !== fallbackType) {
+      slots[fallbackType] += slots[mode];
+      slots[mode] = 0;
+    }
+  }
+
+  // How many of the 25 are actually by the target
+  const targetTotal = randInt(QUIZ_TARGET_MIN, Math.min(QUIZ_TARGET_MAX, totalOwn));
+
+  // Spread target posts across types proportionally, clamped by availability
+  const cap = (mode) => Math.min(own[mode].length, slots[mode]);
+  const targetPer = {};
+  let assigned = 0;
+  for (const mode of MODES) {
+    targetPer[mode] = Math.min(cap(mode), Math.round(targetTotal * slots[mode] / QUIZ_SIZE));
+    assigned += targetPer[mode];
+  }
+  // Fix rounding / clamping so the sum hits targetTotal (or as close as availability allows)
+  let guard = 0;
+  while (assigned !== targetTotal && guard++ < 100) {
+    const dir = assigned < targetTotal ? 1 : -1;
+    const candidate = MODES.find(m => dir > 0 ? targetPer[m] < cap(m) : targetPer[m] > 0);
+    if (!candidate) break;
+    targetPer[candidate] += dir;
+    assigned += dir;
+  }
+
+  const items = [];
+  for (const mode of MODES) {
+    const n = slots[mode];
+    if (n === 0) continue;
+    const ownPicks = sample(own[mode], targetPer[mode]);
+    const decoyPicks = sample(others[mode], n - ownPicks.length);
+    ownPicks.forEach(msg => items.push({ msg, isTarget: true }));
+    decoyPicks.forEach(msg => items.push({ msg, isTarget: false }));
+  }
+  return shuffleInPlace(items);
+};
+
+const getQuizRank = (correct, total = QUIZ_SIZE) => {
+  // 25 -> S, 24 -> A, 23 -> A-, ... 14 -> D-, 13 and below -> F
+  const idx = Math.max(0, Math.min(QUIZ_RANKS.length - 1, correct - (total - (QUIZ_RANKS.length - 1))));
+  return QUIZ_RANKS[idx];
+};
+
+const getQuizRankMessage = (rank) => QUIZ_RANK_MESSAGES[rank[0]] || '';
+
+const generateQuizGridString = (answers) => {
+  const rows = [];
+  for (let i = 0; i < answers.length; i += 5) {
+    rows.push(answers.slice(i, i + 5).map(a => (a.correct ? '🟩' : '🟥')).join(''));
+  }
+  return rows.join('\n');
+};
+
+// Renders <@id> mentions as display names
+const formatMessageContent = (text, users) => {
+  if (!text) return null;
+  const regex = /(<@!?\d+>)/g;
+  return text.split(regex).map((part, i) => {
+    const match = part.match(/<@!?(\d+)>/);
+    if (match) {
+      const user = users[match[1]];
+      const displayName = user ? `@${user.display_name}` : "@User";
+      return (
+        <span key={i} style={{ color: '#5865F2', backgroundColor: '#5865F21A', borderRadius: '3px', padding: '0 2px', fontWeight: '500' }}>
+          {displayName}
+        </span>
+      );
+    }
+    return part;
+  });
+};
+
 const generateGridString = (guessesArray, gaveUp = false, mode = 'text') => {
   const isPerfect = !gaveUp && guessesArray.length === 1 && guessesArray[0].correct;
 
@@ -253,6 +395,15 @@ export default function App() {
 
   const [showHelp, setShowHelp] = useState(false);
 
+  // 'daily' (default) or 'quiz'. Deep-linkable via #quiz.
+  const [view, setView] = useState(() => (window.location.hash === '#quiz' ? 'quiz' : 'daily'));
+  const switchView = (next) => {
+    setView(next);
+    const url = window.location.pathname + window.location.search + (next === 'quiz' ? '#quiz' : '');
+    window.history.replaceState(null, '', url);
+  };
+  const isQuiz = view === 'quiz';
+
   const currentModeIndex = shuffledModes.indexOf(currentMode);
   const isLastMode = currentMode === shuffledModes[shuffledModes.length - 1];
   const advanceMode = () => setCurrentMode(shuffledModes[currentModeIndex + 1]);
@@ -263,8 +414,19 @@ export default function App() {
     <div style={styles.container}>
       {/* HEADER */}
       <div style={styles.header}>
-        <div style={{ width: '24px' }} />
-        <h1 style={styles.title}>{isAprilFools ? 'WHOMSTDLE' : 'WHODLE'} <span style={{ fontSize: '0.8em', opacity: 0.5, letterSpacing: '2px' }}>#{puzzleNum}</span></h1>
+        {isQuiz ? (
+          <span title="Back to daily puzzle" style={{ display: 'inline-flex', cursor: 'pointer', color: '#555' }} onClick={() => switchView('daily')}>
+            <CalendarDays size={24} />
+          </span>
+        ) : (
+          <span title="Quiz: how well do you know a user?" style={{ display: 'inline-flex', cursor: 'pointer', color: '#555' }} onClick={() => switchView('quiz')}>
+            <Brain size={24} />
+          </span>
+        )}
+        <h1 style={styles.title}>
+          {isAprilFools ? 'WHOMSTDLE' : 'WHODLE'}{' '}
+          <span style={{ fontSize: '0.8em', opacity: 0.5, letterSpacing: '2px' }}>{isQuiz ? 'QUIZ' : `#${puzzleNum}`}</span>
+        </h1>
         <CircleHelp
           size={24}
           style={{ cursor: 'pointer', color: '#555' }}
@@ -272,8 +434,10 @@ export default function App() {
         />
       </div>
 
+      {isQuiz && <Quiz />}
+
       {/* MODE PROGRESS INDICATOR */}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginBottom: '24px', fontSize: '1.2rem' }}>
+      <div style={{ display: isQuiz ? 'none' : 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginBottom: '24px', fontSize: '1.2rem' }}>
         {(() => {
           const activeMode = shuffledModes.find(m => {
             const s = localStorage.getItem(`whodle_${m}_${puzzleNum}`);
@@ -304,12 +468,14 @@ export default function App() {
         })()}
       </div>
 
-      <Game
-        key={currentMode}
-        mode={currentMode}
-        shuffledModes={shuffledModes}
-        onNextRound={!isLastMode ? advanceMode : null}
-      />
+      {!isQuiz && (
+        <Game
+          key={currentMode}
+          mode={currentMode}
+          shuffledModes={shuffledModes}
+          onNextRound={!isLastMode ? advanceMode : null}
+        />
+      )}
 
       {/* HELP MODAL */}
       {showHelp && (
@@ -324,6 +490,13 @@ export default function App() {
               <li>Complete all three rounds to share your combined results.</li>
               <li>A new puzzle is available every day at <strong>Midnight EST</strong>.</li>
               <li>Use <strong>Skip</strong> to skip a round and see the answer (counts as a loss).</li>
+            </ul>
+
+            <h3><Brain size={18} style={{ verticalAlign: 'middle' }} /> Quiz Mode</h3>
+            <p>Tap the brain icon to play <strong>"How well do you know…?"</strong> Pick a server member, then judge {QUIZ_SIZE} posts (messages, images, and links) one at a time: did they post it, or did someone else?</p>
+            <ul style={{ paddingLeft: '20px' }}>
+              <li>Somewhere between <strong>40% and 60%</strong> of the posts are really theirs.</li>
+              <li>You get a rank at the end based on how many you called correctly. Play as many times as you like.</li>
             </ul>
 
             <h3>Clues Legend</h3>
@@ -455,7 +628,6 @@ function Game({ mode, shuffledModes, onNextRound }) {
   const [gameOver, setGameOver] = useState(false);
   const [gaveUp, setGaveUp] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isZoomed, setIsZoomed] = useState(false);
   const [combinedRank, setCombinedRank] = useState(null);
 
   const puzzleNum = getPuzzleNumber();
@@ -629,25 +801,6 @@ function Game({ mode, shuffledModes, onNextRound }) {
     return `https://discord.com/channels/${data.meta.guild_id}/${targetMsg.channel_id}/${targetMsg.msg_id}`;
   };
 
-  const formatMessageContent = (text) => {
-    if (!text) return null;
-    const regex = /(<@!?\d+>)/g;
-    return text.split(regex).map((part, i) => {
-      const match = part.match(/<@!?(\d+)>/);
-      if (match) {
-        const userId = match[1];
-        const user = data.users[userId];
-        const displayName = user ? `@${user.display_name}` : "@User";
-        return (
-          <span key={i} style={{ color: '#5865F2', backgroundColor: '#5865F21A', borderRadius: '3px', padding: '0 2px', fontWeight: '500' }}>
-            {displayName}
-          </span>
-        );
-      }
-      return part;
-    });
-  };
-
   if (!data || !targetMsg) return <div style={{ padding: '20px', color: 'white' }}>Loading...</div>;
 
   const guessesRemaining = MAX_GUESSES - guesses.length;
@@ -696,26 +849,7 @@ function Game({ mode, shuffledModes, onNextRound }) {
   return (
     <div style={styles.container}>
       {/* MESSAGE DISPLAY */}
-      {targetMsg.type === 'image' ? (
-        <>
-          <img
-            src={targetMsg.content}
-            style={styles.imagePreview}
-            alt="Image"
-            onClick={() => setIsZoomed(true)}
-            title="Click to zoom"
-          />
-          {isZoomed && (
-            <div style={styles.modalOverlay} onClick={() => setIsZoomed(false)}>
-              <img src={targetMsg.content} style={styles.modalImage} alt="Zoomed" />
-            </div>
-          )}
-        </>
-      ) : targetMsg.type === 'url' ? (
-        <UrlPreview url={targetMsg.content} preview={targetMsg.preview} />
-      ) : (
-        <div style={styles.quoteBox}>"{formatMessageContent(targetMsg.content)}"</div>
-      )}
+      <PostDisplay msg={targetMsg} users={data.users} />
 
       {/* INPUT */}
       {!gameOver && (
@@ -814,6 +948,337 @@ function Game({ mode, shuffledModes, onNextRound }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Renders a single post (text / image / url) the same way in daily and quiz modes
+function PostDisplay({ msg, users }) {
+  const [isZoomed, setIsZoomed] = useState(false);
+
+  if (msg.type === 'image') {
+    return (
+      <>
+        <img
+          src={msg.content}
+          style={styles.imagePreview}
+          alt="Image"
+          onClick={() => setIsZoomed(true)}
+          title="Click to zoom"
+        />
+        {isZoomed && (
+          <div style={styles.modalOverlay} onClick={() => setIsZoomed(false)}>
+            <img src={msg.content} style={styles.modalImage} alt="Zoomed" />
+          </div>
+        )}
+      </>
+    );
+  }
+  if (msg.type === 'url') {
+    return <UrlPreview url={msg.content} preview={msg.preview} />;
+  }
+  return <div style={styles.quoteBox}>"{formatMessageContent(msg.content, users)}"</div>;
+}
+
+// QUIZ MODE: "How well do you know X?"
+function Quiz() {
+  const [datasets, setDatasets] = useState(null);
+  const [loadError, setLoadError] = useState(false);
+  const [search, setSearch] = useState('');
+  const [targetUser, setTargetUser] = useState(null);
+  const [items, setItems] = useState(null);       // [{ msg, isTarget }]
+  const [index, setIndex] = useState(0);
+  const [answers, setAnswers] = useState([]);     // [{ correct, isTarget, type }]
+  const [feedback, setFeedback] = useState(null); // { correct, author, msg } for the current post
+  const [copied, setCopied] = useState(false);
+  const [isNewBest, setIsNewBest] = useState(false);
+
+  useEffect(() => {
+    Promise.all(MODES.map(m => fetch(`./${MODE_FILE[m]}`).then(res => res.json())))
+      .then(([text, image, url]) => setDatasets({ text, image, url }))
+      .catch(() => setLoadError(true));
+  }, []);
+
+  const users = datasets?.text.users;
+  const postCounts = useMemo(() => (datasets ? getQuizPostCounts(datasets) : {}), [datasets]);
+
+  const userList = useMemo(() => {
+    if (!users) return [];
+    const q = search.trim().toLowerCase();
+    return Object.values(users)
+      .filter(u => !q || [u.username, u.nickname, u.display_name].some(n => n.toLowerCase().includes(q)))
+      .sort((a, b) =>
+        // Quizzable members first (alphabetical), then the "too few posts" group
+        ((postCounts[b.id]?.total || 0) >= QUIZ_TARGET_MIN) - ((postCounts[a.id]?.total || 0) >= QUIZ_TARGET_MIN) ||
+        a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' })
+      );
+  }, [users, postCounts, search]);
+
+  const bestKey = (userId) => `whodle_quiz_best_${userId}`;
+  const getBest = (userId) => {
+    const v = parseInt(localStorage.getItem(bestKey(userId)), 10);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  const startQuiz = (user) => {
+    const built = buildQuiz(datasets, user.id);
+    if (!built) return;
+    setTargetUser(user);
+    setItems(built);
+    setIndex(0);
+    setAnswers([]);
+    setFeedback(null);
+    setCopied(false);
+    setIsNewBest(false);
+    window.scrollTo({ top: 0 });
+  };
+
+  const backToPicker = () => {
+    setTargetUser(null);
+    setItems(null);
+    setAnswers([]);
+    setFeedback(null);
+    setSearch('');
+  };
+
+  const finished = !!items && index >= items.length;
+  const correctCount = answers.filter(a => a.correct).length;
+
+  const handleAnswer = (guessIsTarget) => {
+    if (!items || feedback || finished) return;
+    const item = items[index];
+    const correct = guessIsTarget === item.isTarget;
+    setAnswers(prev => [...prev, { correct, isTarget: item.isTarget, type: item.msg.type }]);
+    setFeedback({ correct, author: users[item.msg.author_id], msg: item.msg });
+  };
+
+  const handleNext = () => {
+    if (!feedback) return;
+    const nextIndex = index + 1;
+    if (nextIndex >= items.length) {
+      // Quiz complete: persist best score for this user
+      const prev = getBest(targetUser.id);
+      if (prev === null || correctCount > prev) {
+        localStorage.setItem(bestKey(targetUser.id), String(correctCount));
+        setIsNewBest(prev !== null);
+      }
+    }
+    setFeedback(null);
+    setIndex(nextIndex);
+    window.scrollTo({ top: 0 });
+  };
+
+  // Keyboard shortcuts: 1 / Y / <- = them, 2 / N / -> = someone else, Enter / Space = next
+  useEffect(() => {
+    if (!items || finished) return;
+    const onKey = (e) => {
+      if (e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      const k = e.key.toLowerCase();
+      if (feedback) {
+        if (k === 'enter' || k === ' ' || k === 'arrowright') { e.preventDefault(); handleNext(); }
+        return;
+      }
+      if (k === '1' || k === 'y' || k === 'arrowleft') handleAnswer(true);
+      else if (k === '2' || k === 'n' || k === 'arrowright') handleAnswer(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  const handleShare = () => {
+    const rank = getQuizRank(correctCount, items.length);
+    const userEmoji = getUserEmoji(targetUser.username).replace(/\|\|/g, '');
+    // <@id> renders as a Discord mention when pasted
+    let text = `WHODLE QUIZ\n<@${targetUser.id}> ${userEmoji}\n`;
+    text += `${generateQuizGridString(answers)}\n`;
+    text += `Score: ${correctCount}/${items.length}\n`;
+    text += `Rank: ${rank}\n`;
+    text += 'https://vsporeddy.github.io/whodle/#quiz';
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const getDiscordLink = (msg) =>
+    `https://discord.com/channels/${datasets.text.meta.guild_id}/${msg.channel_id}/${msg.msg_id}`;
+
+  // ---------- RENDER ----------
+  if (loadError) return <div style={{ padding: '20px', color: 'white' }}>Couldn't load the quiz data. Try refreshing.</div>;
+  if (!datasets) return <div style={{ padding: '20px', color: 'white' }}>Loading...</div>;
+
+  // 1) USER PICKER
+  if (!items) {
+    return (
+      <div style={styles.container}>
+        <h2 style={{ marginTop: 0, marginBottom: '4px' }}>How well do you know…</h2>
+        {/* <p style={{ color: '#949BA4', marginTop: 0, fontSize: '0.9rem' }}>
+          Pick someone. You'll judge {QUIZ_SIZE} posts: theirs, or someone else's?
+        </p> */}
+        <div style={styles.inputGroup}>
+          <input
+            style={styles.input}
+            placeholder="Search members..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <div style={styles.quizUserList}>
+          {userList.length === 0 && (
+            <div style={{ padding: '15px', color: '#949BA4', textAlign: 'center' }}>No one matches that.</div>
+          )}
+          {userList.map(u => {
+            const counts = postCounts[u.id] || { total: 0 };
+            const eligible = counts.total >= QUIZ_TARGET_MIN;
+            const best = getBest(u.id);
+            return (
+              <div
+                key={u.id}
+                style={eligible ? styles.dropdownItem : styles.disabledItem}
+                onClick={() => eligible && startQuiz(u)}
+                title={eligible ? `Quiz me on ${u.display_name}` : 'Not enough posts to build a quiz'}
+              >
+                <img src={u.avatar} style={styles.avatarSmall} alt="" />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: '1.2', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{u.display_name}</span>
+                  <span><small style={{ color: '#949BA4' }}>({u.username})</small></span>
+                </div>
+                <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#949BA4', whiteSpace: 'nowrap' }}>
+                  {!eligible && 'too few posts'}
+                  {best !== null && (
+                    <div style={{ color: '#5865F2', fontWeight: 'bold' }}>Best: {best}/{QUIZ_SIZE}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // 3) RESULTS
+  if (finished) {
+    const rank = getQuizRank(correctCount, items.length);
+    const byType = MODES.map(m => {
+      const ofType = answers.filter(a => a.type === m);
+      return { mode: m, correct: ofType.filter(a => a.correct).length, total: ofType.length };
+    }).filter(t => t.total > 0);
+    const actualTargetCount = items.filter(i => i.isTarget).length;
+
+    return (
+      <div style={styles.container}>
+        <div style={styles.resultsBox}>
+          <div style={{ color: '#949BA4', fontSize: '0.85rem', marginBottom: '6px' }}>How well do you know</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
+            <img src={targetUser.avatar} style={styles.avatarSmall} alt="" />
+            <strong style={{ fontSize: '1.2rem' }}>{targetUser.display_name}</strong>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.2rem' }}>Rank:</span>
+            <strong style={{ fontSize: '3rem', color: '#5865F2', transform: 'translateY(4px)' }}>{rank}</strong>
+          </div>
+          <h2 style={{ margin: '5px 0 0' }}>{getQuizRankMessage(rank)}</h2>
+          <div style={{ fontSize: '1.1rem', marginTop: '10px' }}>
+            <strong>{correctCount}</strong> / {items.length} correct
+            {isNewBest && <span style={{ color: '#f0b232', marginLeft: '8px', fontWeight: 'bold' }}>New best! 🌟</span>}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#949BA4', marginTop: '4px' }}>
+            {actualTargetCount} of the {items.length} posts were really theirs
+          </div>
+
+          <div style={styles.quizGrid}>
+            {answers.map((a, i) => (
+              <div
+                key={i}
+                style={{ ...styles.quizGridCell, background: a.correct ? '#23a559' : '#da373c' }}
+                title={`#${i + 1}: ${a.correct ? 'correct' : 'wrong'} (${a.type}${a.isTarget ? ', theirs' : ', decoy'})`}
+              >
+                {MODE_EMOJI[a.type]}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', fontSize: '0.9rem', color: '#dbdee1', marginBottom: '20px', flexWrap: 'wrap' }}>
+            {byType.map(t => (
+              <span key={t.mode}>{MODE_EMOJI[t.mode]} {t.correct}/{t.total}</span>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={handleShare} style={styles.btnPrimary}>
+              <Share2 size={18} /> {copied ? 'Copied!' : 'Share Results'}
+            </button>
+            <button onClick={() => startQuiz(targetUser)} style={styles.btnSecondary}>
+              <RotateCcw size={18} /> Again
+            </button>
+            <button onClick={backToPicker} style={styles.btnSecondary}>
+              <Users size={18} /> Someone else
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2) QUESTION
+  const item = items[index];
+  const wrongCount = answers.length - correctCount;
+
+  return (
+    <div style={styles.container}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '4px' }}>
+        <img src={targetUser.avatar} style={styles.avatarSmall} alt="" />
+        <span>Did <strong>{targetUser.display_name}</strong> post this?</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#949BA4' }}>
+        <span>{index + 1} / {items.length}</span>
+        <span>✅ {correctCount} · ❌ {wrongCount}</span>
+      </div>
+      <div style={styles.quizProgressTrack}>
+        <div style={{ ...styles.quizProgressFill, width: `${(index / items.length) * 100}%` }} />
+      </div>
+
+      <PostDisplay key={item.msg.msg_id} msg={item.msg} users={users} />
+
+      {!feedback ? (
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button style={styles.quizChoiceYes} onClick={() => handleAnswer(true)} title="Shortcut: 1, Y, or Left arrow">
+            <Check size={18} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>yup that's {targetUser.display_name}</span>
+          </button>
+          <button style={styles.quizChoiceNo} onClick={() => handleAnswer(false)} title="Shortcut: 2, N, or Right arrow">
+            <X size={18} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>not {targetUser.display_name}</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={{ ...styles.quizFeedback, background: feedback.correct ? '#23a559' : '#da373c' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '6px' }}>
+              {feedback.correct ? 'Correct!' : 'Nope.'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.95rem' }}>
+              it was actually
+              <img src={feedback.author?.avatar} style={{ width: '24px', height: '24px', borderRadius: '50%' }} alt="" />
+              <strong>{feedback.author?.display_name || 'Unknown'}</strong>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={handleNext} style={styles.btnPrimary} autoFocus>
+              {index + 1 >= items.length ? 'See results' : 'Next →'}
+            </button>
+            <a href={getDiscordLink(feedback.msg)} target="_blank" rel="noopener noreferrer" style={{ ...styles.btnSecondary, padding: '12px 16px' }} title="Jump to message">
+              <ExternalLink size={18} />
+            </a>
+          </div>
+        </>
+      )}
+
+      <div style={{ marginTop: '20px' }}>
+        <button style={styles.btnDanger} onClick={backToPicker}>QUIT</button>
+      </div>
     </div>
   );
 }
